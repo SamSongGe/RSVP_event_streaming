@@ -1,0 +1,120 @@
+2.(kafka-topics)  
+	kafka-topics --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --list --exclude-internal
+	kafka-topics --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --create --partitions 2 --replication-factor 2 --topics rsvp_samsongge
+	kafka-topics --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --topic rsvp_samsongge --describe
+3.(kafka-console-producer) [round-robin 轮流传输] 
+	'''building pipe for the source'''
+	curl https://stream.meetup.com/2/rsvps | kafka-console-producer --broker-list ip-172-31-91-232.ec2.internal:9092,ip-172-31-94-165.ec2.internal:9092 --topic rsvp_samsongge
+	'''curl https://httpbin.org/stream/20 | kafka-console-producer --broker-list ip-172-31-91-232.ec2.internal:9092,ip-172-31-94-165.ec2.internal:9092 --topic rsvp_samsongge'''
+	'''consumer'''
+	'''kafka-consumer-groups --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --list'''
+	kafka-console-consumer --group sam_group --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --topic rsvp_samsongge 
+	kafka-consumer-groups --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --list
+	kafka-consumer-groups --bootstrap-server ip-172-31-91-232.ec2.internal:9092 --group sam_group --topic rsvp_samsongge --reset-offsets --to-earliest --execute
+	-----------------------------------------------------------------------------------------------------------
+											'''python_script'''
+												pip install kafka
+											'''python producer'''
+												from kafka import kafkaProducer
+												bootstrap_servers = ['ip-172-31-91-232.ec2.internal:9092', 'ip-172-31-94-165.ec2.internal:9092']
+												topicName = 'rsvp_samsongge'
+												producer = kafkaProducer(bootstrap_servers = bootstrap_servers)
+												producer = kafkaProducer()
+												message = producer.send(curl https://stream.meetup.com/2/rsvps)
+
+											'''python consumer''' 
+												from kafka import kafkaConsumer
+												import sys
+												bootstrap_servers = ['ip-172-31-91-232.ec2.internal:9092']
+												topicName = 'rsvp_samsongge'
+												consumer = KafkaConsumer (topicName, group_id = 'sam',bootstrap_servers = bootstrap_servers, auto_offset_reset = 'earliest')
+												for msg in consumer:
+													print(msg)
+												sys.exit()
+
+											vi producer.py
+	------------------------------------------------------------------------------------------------------------
+4.	spark.conf.set("spark.sql.shuffle.partitions",2)
+	from pyspark.sql.functions import *
+	from pyspark.sql.column import *
+	'''kafka-streaming doc: https://spark.apache.org/docs/latest/structured-streaming-kafka-integration.html'''
+----------------------------------------------------------------------------------------------------------------
+4.1 Save events in HDFS in text(json) format. Use "kafka" source and "file" sink. Set outputMode to "append".
+============ ( not verify yet)
+
+	q1 = spark.readStream.format("kafka").option("kafka.bootstrap.servers", "ip-172-31-91-232.ec2.internal:9092").option("subscribe", "rsvp_samsongge").option("startingOffsets", "latest").option("failOnDataLoss", "false").load()
+	q1_1 = q1.selectExpr("CAST(value AS STRING)")
+	q1_1.writeStream.trigger(processingTime='60 seconds').format("text").option("path","/user/samsongge/rsvp/text").option("checkpointLocation","/user/samsongge/rsvp/text_checkpoint").outputMode("append").start()
+----------------------------------------------------------------------------------------------------------------
+4.2 Save events in HDFS in parquet format with schema. Use "kafka" source and "file" sink. Set outputMode to "append".
+============ 
+
+	q2 = spark.readStream.format("kafka").option("kafka.bootstrap.servers", "ip-172-31-91-232.ec2.internal:9092").option("subscribe", "rsvp_samsongge").option("startingOffsets", "latest").option("failOnDataLoss", "false").load()
+
+	q2_1 = q2.select(q2.value.cast('string'))
+	'''Schema'''
+	file = spark.read.format('json').load('/user/samsongge/rsvp/text',inferSchema="true")
+	q2_2 = q2_1.select(from_json(q2_1.value, file.schema).alias("record"))
+	q2_3 = q2_2.select(col("record.*"))
+	'''
+	file = spark.read.options(inferSchema='true').json('/user/samsongge/rsvp/json')
+	file = spark.read.format('json').load('/user/samsongge/rsvp/text',inferSchema="true", sep=",")
+	'''
+
+	"""Wirte"""
+	q2_3.writeStream.trigger(processingTime="60 seconds").format("parquet").option("path", "/user/samsongge/rsvp/parquet").option("checkpointLocation", "/user/samsongge/rsvp/parquet_checkpoint").outputMode("append").start()
+
+------------------------------------------------------------------------------------------------------------------
+4.3 
+	q3 = spark.readStream.format("kafka").option("kafka.bootstrap.servers", "ip-172-31-91-232.ec2.internal:9092").option("subscribe", "rsvp_samsongge").option("startingOffsets", "latest").option("failOnDataLoss", "false").load()
+	
+	q3_1 = q3.select("timestamp")
+	q3_1.printSchema() 
+
+	q3.groupBy(window(col("timestamp"), "2 minutes")).count().orderBy('window').writeStream.format("console").trigger(processingTime="60 seconds").outputMode("complete").option('truncate',"false").start()
+4.4 
+	q4 = spark.readStream.format("kafka").option("kafka.bootstrap.servers", "ip-172-31-91-232.ec2.internal:9092").option("subscribe", "rsvp_samsongge").option("startingOffsets", "latest").option("failOnDataLoss", "false").load()
+	q4_1 = q4.select("timestamp")
+	q4_4 = q4.select(q4.value.cast('string'),q4.timestamp)
+
+	file = spark.read.format('json').load('/user/samsongge/rsvp/text',inferSchema="true")
+	q4_2 = q4_4.select(from_json(q4_4.value, file.schema).alias("record"),q4_4.timestamp)
+	
+	q4_3= q4_2.groupBy(window(col("timestamp"), "2 minutes", "1 minutes"),q4_2.record.state).count().orderBy('window')
+	q4_3.writeStream.format("console").trigger(processingTime="10 seconds").outputMode("complete").option('truncate',"false").start()
+
+	'''q4_4 = q4.select(from_json(q4.value.cast('string'),file.schema).alias("record"),q4.timestamp)'''
+
+4.5 
+	
+	q5 = spark.readStream.format("kafka").option("kafka.bootstrap.servers", "ip-172-31-91-232.ec2.internal:9092").option("subscribe", "rsvp_samsongge").option("startingOffsets", "latest").option("failOnDataLoss", "false").load()
+
+	q5_1 = q5.select(q5.value.cast('string'))
+	'''Schema'''
+	file = spark.read.format('json').load('/user/samsongge/rsvp/text',inferSchema="true")
+	q5_2 = q5_1.select(from_json(q5_1.value, file.schema).alias("record"))
+	q5_3 = q5_2.select(col("record.*"))
+
+
+create table if not exists rsvp_db.rsvp_kudu_samsongge(
+rsvp_id bigint primary key,
+city    string,
+company string,
+name    string,
+state   string
+)
+PARTITION BY HASH PARTITIONS 2 STORED AS KUDU;
+
+	"""Wirte"""
+	(
+	q5_3.writeStream.trigger(processingTime="30 seconds")
+	.format("kudu")
+	.option("kudu.master", "ip-172-31-89-172.ec2.internal,ip-172-31-86-198.ec2.internal,ip-172-31-93-228.ec2.internal")
+	.option("kudu.table", "impala::rsvp_db.rsvp_kudu_samsongge")
+	.option("kudu.operation", "upsert")
+	.option("checkpointLocation", "/user/samsongge/rsvp/kudu_checkpoint")
+	.start()
+	)
+
+
+SELECT count(*) from rsvp_db.rsvp_kudu_samsongge;
