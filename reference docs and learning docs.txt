@@ -1,0 +1,40 @@
+SPARK
+
+starting guide:
+https://spark.apache.org/docs/latest/sql-getting-started.html
+
+
+Spark Streaming Programming Guide:
+https://spark.apache.org/docs/latest/streaming-programming-guide.html
+
+Spark SQL, DataFrames and Datasets Guide:
+https://spark.apache.org/docs/latest/sql-programming-guide.html
+https://spark.apache.org/docs/3.1.1/api/python/reference/pyspark.sql.html
+
+https://www.learningjournal.guru/courses/spark/spark-foundation-training/spark-dataframe-transformations/
+
+Pyspark:
+https://spark.apache.org/docs/latest/api/python/getting_started/quickstart_df.html
+https://sparkbyexamples.com/pyspark-tutorial/
+
+APIs Docs:
+https://spark.apache.org/docs/2.4.0/api/python/index.html
+
+PysparkDataFrame:
+https://sparkbyexamples.com/pyspark/different-ways-to-create-dataframe-in-pyspark/
+------------------------------------------------------------------------------------------
+
+HDFS
+HDFS Architecture Guide:
+https://hadoop.apache.org/docs/r1.2.1/hdfs_design.html
+APIs:
+https://hadoop.apache.org/docs/r1.2.1/api/index.html
+-------------------------------------------------------
+Kafka
+https://kafka.apache.org/quickstart
+https://kafka.apache.org/documentation/#gettingStarted
+https://kafka.apache.org/documentation/#api
+-------------------------------------------------------
+Yarn
+https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/YARN.html
+----------------------------------------------------------------------------
